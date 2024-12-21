@@ -10,7 +10,16 @@ RUN apk add --no-cache \
 ADD https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip /tmp/pb.zip
 RUN unzip /tmp/pb.zip -d /pb/
 
+# create data directory and symlink it
+RUN mkdir -p /data/pb_data && \
+    mkdir -p /pb/pb_data && \
+    ln -s /data/pb_data /pb/pb_data
+
 EXPOSE 8080
+
+VOLUME /data
+
+WORKDIR /pb
 
 # start PocketBase
 CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8080"]
