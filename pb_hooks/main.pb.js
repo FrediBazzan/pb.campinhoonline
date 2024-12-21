@@ -1,5 +1,13 @@
 /// <reference path="../pb_data/types.d.ts" />
 
+// Health check endpoint
+routerAdd("GET", "/api/health", (c) => {
+    return c.json(200, {
+        status: "healthy",
+        timestamp: new Date().toISOString()
+    });
+});
+
 onRequest((e) => {
     const allowedOrigins = [
         "https://campinho.online",
