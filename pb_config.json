@@ -1,4 +1,12 @@
 {
     "http_port": 8091,
-    "http_host": "127.0.0.1"
+    "http_host": "127.0.0.1",
+    "email": {
+        "enabled": true,
+        "host": "smtp.gmail.com",
+        "port": 587,
+        "username": "campinho.online@gmail.com",
+        "password": "fhet mzsw fzei hgmc",
+        "tls": true
+    }
 }
