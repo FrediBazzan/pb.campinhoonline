@@ -4,7 +4,7 @@
 #
 
 app = "campinho"
-primary_region = "gru"
+primary_region = "scl"
 
 [build]
   dockerfile = "Dockerfile"
@@ -24,4 +24,4 @@ primary_region = "gru"
 
 [mounts]
   source = "pb_data"   # Nome do volume criado
-  destination = "/pb_data"   # Caminho dentro do contêiner onde o volume será montado
+  destination = "/pb/pb_data"   # Caminho dentro do contêiner onde o volume será montado
