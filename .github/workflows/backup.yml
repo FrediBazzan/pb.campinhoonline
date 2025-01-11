@@ -1,0 +1,41 @@
+name: Daily PocketBase Backup
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Executa todo dia à meia-noite
+  workflow_dispatch:  # Permite execução manual
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Create backup directory
+        run: mkdir -p backups
+
+      - name: Create backup
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          DATE=$(date +%Y%m%d)
+          flyctl ssh console -a campinho << 'EOF'
+          cd /pb/pb_data
+          tar -czf /tmp/pb_backup_$DATE.tar.gz .
+          EOF
+          flyctl sftp get /tmp/pb_backup_$DATE.tar.gz -a campinho
+          mv pb_backup_$DATE.tar.gz backups/
+
+      - name: Commit and push backup
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add backups/
+          git commit -m "Backup automático - $(date +%Y-%m-%d)" || echo "No changes to commit"
+          git push
