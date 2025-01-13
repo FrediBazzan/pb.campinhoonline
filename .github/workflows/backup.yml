@@ -25,12 +25,18 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           DATE=$(date +%Y%m%d)
-          flyctl ssh console -a campinho << 'EOF'
-          cd /pb/pb_data
-          tar -czf /tmp/pb_backup_$DATE.tar.gz .
-          EOF
-          flyctl sftp get /tmp/pb_backup_$DATE.tar.gz -a campinho
-          mv pb_backup_$DATE.tar.gz backups/
+          echo "Creating backup for date: $DATE"
+          
+          # Criar backup via SSH
+          flyctl ssh console -a campinho "cd /pb/pb_data && tar -czf /tmp/pb_backup_${DATE}.tar.gz ."
+          
+          # Download do arquivo
+          echo "Downloading backup file..."
+          flyctl sftp get /tmp/pb_backup_${DATE}.tar.gz -a campinho
+          
+          # Mover para diretório de backups
+          echo "Moving backup to backups directory..."
+          mv pb_backup_${DATE}.tar.gz backups/
 
       - name: Commit and push backup
         run: |
