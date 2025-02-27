@@ -13,6 +13,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          lfs: true
 
       - name: Install Fly CLI
         uses: superfly/flyctl-actions/setup-flyctl@master
@@ -20,28 +21,40 @@ jobs:
       - name: Create backup directory
         run: mkdir -p backups
 
-      - name: Create backup
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Create and download backup
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          DATE=$(date +%Y%m%d)
-          echo "Creating backup for date: $DATE"
+          echo "Creating snapshot..."
+          # Criar snapshot do volume
+          SNAPSHOT_ID=$(flyctl volumes snapshot create pb_data --app campinho --json | jq -r '.ID')
           
-          # Criar backup via SSH
-          flyctl ssh console -a campinho "cd /pb/pb_data && tar -czf /tmp/pb_backup_${DATE}.tar.gz ."
+          echo "Waiting for snapshot to complete..."
+          sleep 30  # Dar tempo para o snapshot ser criado
           
-          # Download do arquivo
-          echo "Downloading backup file..."
-          flyctl sftp get /tmp/pb_backup_${DATE}.tar.gz -a campinho
-          
-          # Mover para diretório de backups
-          echo "Moving backup to backups directory..."
-          mv pb_backup_${DATE}.tar.gz backups/
+          echo "Downloading and compressing snapshot..."
+          # Baixar o snapshot e comprimir com xz
+          flyctl volumes snapshots download $SNAPSHOT_ID \
+            --app campinho \
+            -o - | xz -9 > "backups/pb_backup_${{ steps.date.outputs.date }}.tar.xz"
 
-      - name: Commit and push backup
+      - name: Clean old backups
+        run: |
+          # Manter apenas os últimos 7 backups
+          cd backups
+          ls -t pb_backup_*.tar.xz | tail -n +8 | xargs -r rm --
+          cd ..
+
+      - name: Commit and push backup with LFS
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git lfs track "backups/*.tar.xz"  # Garantir que novos arquivos sejam rastreados
           git add backups/
+          git add .gitattributes
           git commit -m "Backup automático - $(date +%Y-%m-%d)" || echo "No changes to commit"
           git push
