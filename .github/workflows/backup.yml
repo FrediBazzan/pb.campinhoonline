@@ -31,16 +31,17 @@ jobs:
         run: |
           echo "Creating snapshot..."
           # Criar snapshot do volume
-          SNAPSHOT_ID=$(flyctl volumes snapshot create pb_data --app campinho --json | jq -r '.ID')
+          flyctl volume snapshot -a campinho pb_data
           
           echo "Waiting for snapshot to complete..."
           sleep 30  # Dar tempo para o snapshot ser criado
           
+          echo "Getting latest snapshot ID..."
+          SNAPSHOT_ID=$(flyctl volume snapshots list -a campinho | grep pb_data | head -n 1 | awk '{print $1}')
+          
           echo "Downloading and compressing snapshot..."
           # Baixar o snapshot e comprimir com xz
-          flyctl volumes snapshots download $SNAPSHOT_ID \
-            --app campinho \
-            -o - | xz -9 > "backups/pb_backup_${{ steps.date.outputs.date }}.tar.xz"
+          flyctl volume snapshot download -a campinho $SNAPSHOT_ID | xz -9 > "backups/pb_backup_${{ steps.date.outputs.date }}.tar.xz"
 
       - name: Clean old backups
         run: |
