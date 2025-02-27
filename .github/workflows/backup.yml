@@ -29,19 +29,21 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          echo "Creating snapshot..."
-          # Criar snapshot do volume
-          flyctl volumes snapshot create pb_data -a campinho
+          echo "Getting volume ID..."
+          VOLUME_ID=$(flyctl volumes list -a campinho | grep pb_data | awk '{print $1}')
+          
+          echo "Creating snapshot for volume $VOLUME_ID..."
+          flyctl volumes snapshots create $VOLUME_ID
           
           echo "Waiting for snapshot to complete..."
           sleep 30  # Dar tempo para o snapshot ser criado
           
           echo "Getting latest snapshot ID..."
-          SNAPSHOT_ID=$(flyctl volumes snapshots list -a campinho | grep pb_data | head -n 1 | awk '{print $1}')
+          SNAPSHOT_ID=$(flyctl volumes snapshots list $VOLUME_ID | grep created | head -n 1 | awk '{print $1}')
           
           echo "Downloading and compressing snapshot..."
           # Baixar o snapshot e comprimir com xz
-          flyctl volumes snapshots download -a campinho $SNAPSHOT_ID | xz -9 > "backups/pb_backup_${{ steps.date.outputs.date }}.tar.xz"
+          flyctl volumes snapshots download $SNAPSHOT_ID | xz -9 > "backups/pb_backup_${{ steps.date.outputs.date }}.tar.xz"
 
       - name: Clean old backups
         run: |
