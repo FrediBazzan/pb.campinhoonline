@@ -36,7 +36,7 @@ jobs:
           APP_STATUS=$(flyctl status -a campinho)
           if ! echo "$APP_STATUS" | grep -q "running"; then
             echo "App is not running. Starting it..."
-            flyctl start -a campinho
+            flyctl apps start campinho
             
             echo "Waiting for app to start..."
             for i in {1..30}; do
