@@ -34,6 +34,7 @@ jobs:
         run: |
           echo "Getting volume ID..."
           VOLUME_ID=$(flyctl volumes list -a campinho | grep pb_data | awk '{print $1}')
+          echo "Volume ID: $VOLUME_ID"
           
           echo "Creating snapshot for volume $VOLUME_ID..."
           flyctl volumes snapshots create $VOLUME_ID
@@ -42,17 +43,48 @@ jobs:
           sleep 30  # Dar tempo para o snapshot ser criado
           
           echo "Getting latest snapshot ID..."
-          SNAPSHOT_ID=$(flyctl volumes snapshots list $VOLUME_ID | grep created | head -n 1 | awk '{print $1}')
+          SNAPSHOT_INFO=$(flyctl volumes snapshots list $VOLUME_ID | grep created | head -n 1)
+          SNAPSHOT_ID=$(echo "$SNAPSHOT_INFO" | awk '{print $1}')
+          SNAPSHOT_SIZE=$(echo "$SNAPSHOT_INFO" | awk '{print $3}')
+          echo "Latest snapshot: ID=$SNAPSHOT_ID, Size=$SNAPSHOT_SIZE bytes"
           
-          echo "Downloading and compressing snapshot..."
-          # Baixar o snapshot e comprimir com xz
-          flyctl volumes snapshots download $SNAPSHOT_ID | xz -9 > "backups/pb_backup_${{ steps.date.outputs.date }}.tar.xz"
+          echo "Downloading snapshot to temporary file..."
+          # Primeiro baixar para um arquivo temporário sem compressão
+          TEMP_FILE="/tmp/snapshot.tar"
+          flyctl volumes snapshots download $SNAPSHOT_ID > "$TEMP_FILE"
+          
+          # Verificar o tamanho do arquivo temporário
+          TEMP_SIZE=$(stat -c%s "$TEMP_FILE" || stat -f%z "$TEMP_FILE")
+          echo "Downloaded snapshot size: $TEMP_SIZE bytes"
+          
+          if [ "$TEMP_SIZE" -lt 1000000 ]; then
+            echo "Error: Downloaded snapshot is suspiciously small (less than 1MB)"
+            cat "$TEMP_FILE"  # Mostrar conteúdo para debug
+            exit 1
+          fi
+          
+          echo "Compressing snapshot..."
+          BACKUP_FILE="backups/pb_backup_${{ steps.date.outputs.date }}.tar.xz"
+          # Usar compressão mais agressiva
+          xz -9 -e -c "$TEMP_FILE" > "$BACKUP_FILE"
+          
+          # Verificar o tamanho do arquivo comprimido
+          BACKUP_SIZE=$(stat -c%s "$BACKUP_FILE" || stat -f%z "$BACKUP_FILE")
+          echo "Compressed backup size: $BACKUP_SIZE bytes"
+          
+          if [ "$BACKUP_SIZE" -lt 1000000 ]; then
+            echo "Error: Compressed backup is suspiciously small (less than 1MB)"
+            exit 1
+          fi
+          
+          # Limpar arquivo temporário
+          rm "$TEMP_FILE"
 
       - name: Clean old backups
         run: |
-          # Manter apenas os últimos 7 backups
+          # Manter apenas os últimos 3 backups
           cd backups
-          ls -t pb_backup_*.tar.xz | tail -n +8 | xargs -r rm --
+          ls -t pb_backup_*.tar.xz | tail -n +4 | xargs -r rm --
           cd ..
 
       - name: Commit and push backup with LFS
