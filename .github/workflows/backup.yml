@@ -32,6 +32,27 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
+          echo "Checking app status..."
+          APP_STATUS=$(flyctl status -a campinho)
+          if ! echo "$APP_STATUS" | grep -q "running"; then
+            echo "App is not running. Starting it..."
+            flyctl start -a campinho
+            
+            echo "Waiting for app to start..."
+            for i in {1..30}; do
+              if flyctl status -a campinho | grep -q "running"; then
+                echo "App is now running"
+                break
+              fi
+              if [ $i -eq 30 ]; then
+                echo "Timeout waiting for app to start"
+                exit 1
+              fi
+              echo "Still waiting... ($i/30)"
+              sleep 10
+            done
+          fi
+          
           echo "Getting app instance..."
           APP_INSTANCE=$(flyctl status -a campinho | grep v1 | awk '{print $1}')
           echo "App instance: $APP_INSTANCE"
