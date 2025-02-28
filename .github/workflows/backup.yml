@@ -32,28 +32,20 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          echo "Getting volume ID..."
-          VOLUME_ID=$(flyctl volumes list -a campinho | grep pb_data | awk '{print $1}')
-          echo "Volume ID: $VOLUME_ID"
+          echo "Getting app instance..."
+          APP_INSTANCE=$(flyctl status -a campinho | grep v1 | awk '{print $1}')
+          echo "App instance: $APP_INSTANCE"
           
-          echo "Creating snapshot for volume $VOLUME_ID..."
-          flyctl volumes snapshots create $VOLUME_ID
+          echo "Creating backup directory in the app..."
+          flyctl ssh console -a campinho -C "mkdir -p /pb_data/backup"
           
-          echo "Waiting for snapshot to complete..."
-          sleep 30  # Dar tempo para o snapshot ser criado
+          echo "Creating backup file..."
+          BACKUP_NAME="pb_backup_${{ steps.date.outputs.date }}.tar"
+          flyctl ssh console -a campinho -C "cd /pb_data && tar cf backup/$BACKUP_NAME *.db migrations"
           
-          echo "Getting latest snapshot ID..."
-          SNAPSHOT_INFO=$(flyctl volumes snapshots list $VOLUME_ID | grep created | head -n 1)
-          SNAPSHOT_ID=$(echo "$SNAPSHOT_INFO" | awk '{print $1}')
-          SNAPSHOT_SIZE=$(echo "$SNAPSHOT_INFO" | awk '{print $3}')
-          echo "Latest snapshot: ID=$SNAPSHOT_ID, Size=$SNAPSHOT_SIZE bytes"
-          
-          echo "Downloading snapshot to temporary file..."
-          # Primeiro baixar para um arquivo temporário sem compressão
-          TEMP_FILE="/tmp/snapshot.tar"
-          
-          # Usar redirecionamento em vez de --file
-          flyctl volumes snapshots download --verbose "$SNAPSHOT_ID" > "$TEMP_FILE"
+          echo "Downloading backup file..."
+          TEMP_FILE="/tmp/$BACKUP_NAME"
+          flyctl ssh sftp get -a campinho "/pb_data/backup/$BACKUP_NAME" "$TEMP_FILE"
           
           # Verificar se o download foi bem sucedido
           if [ ! -f "$TEMP_FILE" ]; then
@@ -63,16 +55,16 @@ jobs:
           
           # Verificar o tamanho do arquivo temporário
           TEMP_SIZE=$(stat -c%s "$TEMP_FILE" || stat -f%z "$TEMP_FILE")
-          echo "Downloaded snapshot size: $TEMP_SIZE bytes"
+          echo "Downloaded backup size: $TEMP_SIZE bytes"
           
           if [ "$TEMP_SIZE" -lt 1000000 ]; then
-            echo "Error: Downloaded snapshot is suspiciously small (less than 1MB)"
-            echo "Snapshot content preview:"
+            echo "Error: Downloaded backup is suspiciously small (less than 1MB)"
+            echo "Backup content preview:"
             head -c 1000 "$TEMP_FILE" | xxd  # Mostrar conteúdo em hexadecimal para debug
             exit 1
           fi
           
-          echo "Compressing snapshot..."
+          echo "Compressing backup..."
           BACKUP_FILE="backups/pb_backup_${{ steps.date.outputs.date }}.tar.xz"
           # Usar compressão mais agressiva
           xz -9 -e -c "$TEMP_FILE" > "$BACKUP_FILE"
@@ -86,8 +78,9 @@ jobs:
             exit 1
           fi
           
-          # Limpar arquivo temporário
+          # Limpar arquivos temporários
           rm "$TEMP_FILE"
+          flyctl ssh console -a campinho -C "rm /pb_data/backup/$BACKUP_NAME"
 
       - name: Clean old backups
         run: |
